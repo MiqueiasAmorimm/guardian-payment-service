@@ -55,10 +55,14 @@ public class Payment {
         this.updatedAt = Instant.now();
     }
 
-    private void validateOrderId(UUID orderId) {
-        if (orderId == null) {
-            throw new IllegalArgumentException("orderId cannot be null");
+    private static final PaymentStatusTransitionValidator TRANSITION_VALIDATOR = new PaymentStatusTransitionValidator();
+
+    public void updateStatus(PaymentStatus newStatus) {
+        if (!TRANSITION_VALIDATOR.canTransition(this.status, newStatus)) {
+            throw new IllegalArgumentException("Cannot transition payment from " + this.status + " to " + newStatus);
         }
+        this.status = newStatus;
+        this.updatedAt = Instant.now();
     }
 
     private void validateAmount(BigDecimal amount) {
@@ -70,6 +74,11 @@ public class Payment {
     private void validateCurrency(String currency) {
         if (currency == null || currency.isBlank()) {
             throw new IllegalArgumentException("currency cannot be empty");
+        }
+    }
+    private void validateOrderId(UUID orderId) {
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId cannot be null");
         }
     }
 }
