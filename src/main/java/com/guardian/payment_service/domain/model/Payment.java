@@ -65,6 +65,14 @@ public class Payment {
         this.updatedAt = Instant.now();
     }
 
+    public void approve() {
+        updateStatus(PaymentStatus.APPROVED);
+    }
+    public void reject(String reason) {
+        updateStatus(PaymentStatus.REJECTED);
+        this.reason = reason;
+    }
+
     private void validateAmount(BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("amount must be greater than zero");
