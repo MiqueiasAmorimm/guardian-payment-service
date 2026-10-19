@@ -10,12 +10,13 @@ Microservice responsible for payments in an event-driven e-commerce system. It c
 - `PaymentStatus` enum (PENDING, APPROVED, REJECTED) and `PaymentStatusTransitionValidator`
 - Flyway migration that creates the `payments` table
 - `PaymentRepository`
+- CI with GitHub Actions (build and test on every push to main)
 
 **Planned**
 - Use case that creates and decides the payment from the received event
 - Protection against duplicate events (one payment per order)
 - Publishing `payment.approved` and `payment.rejected`
-- Unit tests and CI
+- Unit tests
 
 ## Tech Stack
 
@@ -91,3 +92,7 @@ Publishing the payment result (`payment.approved` and `payment.rejected`) is pla
 ## Testing
 
 No tests yet. Planned: unit tests for the `Payment` entity and the transition validator.
+
+## CI
+
+GitHub Actions builds the project and runs the tests on every push and pull request to main. Until the first tests exist, the run only checks that the project compiles.
