@@ -1,12 +1,13 @@
 # Guardian — Payment Service
 
-Microservice responsible for payments in an event-driven e-commerce system. It consumes `order.created` events published by the order-service, creates a payment for each order and keeps its own database. This service is under development.
+Microservice responsible for payments in an event-driven e-commerce system. It consumes `order.created` events published by the order-service, creates a payment for each order, publishes `payment.approved` and keeps its own database. This service is under development.
 
 ## Status
 
 **Implemented**
 - Consumer for the `order.created` topic (Kafka)
 - Use case that creates a payment from each received event (approval is simulated: every payment is approved)
+- Publishing `payment.approved` after the payment is saved, through `PaymentEventPublisher`
 - Duplicate event check: a repeated event for the same order does not create a second payment (`existsByOrderId` plus a unique constraint on `order_id`)
 - `Payment` entity with validation in the constructor, `approve()` and `reject(reason)`
 - `PaymentStatus` enum (PENDING, APPROVED, REJECTED) and `PaymentStatusTransitionValidator`
@@ -15,7 +16,7 @@ Microservice responsible for payments in an event-driven e-commerce system. It c
 - CI with GitHub Actions (build and test on every push to main)
 
 **Planned**
-- Publishing `payment.approved` and `payment.rejected`
+- Publishing `payment.rejected` (`reject(reason)` exists, but nothing triggers it yet)
 - Unit tests (including one for the duplicate event check)
 
 ## Tech Stack
@@ -36,7 +37,7 @@ The project follows the same layered architecture as the other services:
 
 - **domain** → `Payment` entity, `PaymentStatus` and `PaymentStatusTransitionValidator`
 - **application** → `ProcessOrderCreatedUseCase`
-- **infrastructure** → JPA repository and Kafka (`OrderCreatedEvent`, `OrderCreatedConsumer`)
+- **infrastructure** → JPA repository and Kafka (`OrderCreatedEvent`, `OrderCreatedConsumer`, `PaymentApprovedEvent`, `PaymentEventPublisher`)
 - **web** → reserved for controllers (no REST endpoints yet)
 
 ### Technical Decisions
@@ -45,8 +46,9 @@ The project follows the same layered architecture as the other services:
 - **Own copy of `OrderCreatedEvent`** — no shared code with order-service; only the JSON contract connects them
 - **Database per service** — payment-service owns its PostgreSQL database
 - **Idempotent consumer** — Kafka may deliver the same message more than once, so the use case ignores an event whose order already has a payment, and the database rejects a second payment for the same order
+- **Publishing isolated in `PaymentEventPublisher`** — the use case does not know the topic name or the Kafka API
 
-See `DECISIONS.md` for the reasoning behind the first three.
+See `DECISIONS.md` for the reasoning behind these decisions.
 
 ## Configuration
 
@@ -80,15 +82,49 @@ This starts the PostgreSQL instances (catalog, order and payment) and the Kafka 
 mvn spring-boot:run
 ```
 
-The application runs on port `8083`. To see it working, create an order through the order-service; the payment-service logs a `Received order.created` line and stores an approved payment for it.
+The application runs on port `8083`. To see it working, create an order through the order-service (with the catalog-service running); the payment-service logs a `Received order.created` line, stores an approved payment and publishes `payment.approved`.
 
 ## Communication
 
-This service consumes events from **Apache Kafka**:
+This service uses **Apache Kafka**.
 
-- `order.created` — published by order-service when an order is created. It carries the order ID, the order total, the currency and a timestamp.
+**Consumes** `order.created` — published by order-service when an order is created. It carries the order ID, the order total, the currency and a timestamp.
 
-Publishing the payment result (`payment.approved` and `payment.rejected`) is planned.
+```json
+{
+  "orderId": "18245f41-d995-4e4f-b1e9-ead05cbb779f",
+  "amount": 200.00,
+  "currency": "BRL",
+  "createdAt": 1792646663.628439700
+}
+```
+
+`createdAt` is the creation instant as epoch seconds with a fractional part (how Jackson serializes `java.time.Instant` by default).
+
+**Publishes** `payment.approved` — after an approved payment is saved. Consumed by order-service, which moves the order to `APPROVED`.
+
+```json
+{
+  "orderId": "7508a9dc-1f38-4d1b-ae7b-99dc042b583a",
+  "paymentId": "dc5644b2-de66-43d8-9d13-8ed362cca1e3",
+  "amount": 200.00,
+  "currency": "BRL"
+}
+```
+
+`payment.rejected` is planned.
+
+## Known limitations
+
+- Every payment is approved: the decision is simulated.
+- Saving the payment and publishing the event are not atomic. If the publish fails after the save, the order never gets its approval, and a redelivery of `order.created` is ignored by the duplicate check, so the event is not sent again. The planned fix is the transactional outbox.
+- The result of the Kafka send is not checked.
+- The duplicate check has no automated test yet.
+
+## Related repositories
+
+- [catalog-service](https://github.com/MiqueiasAmorimm/guardian-catalog-service) — product catalog, and where the shared `docker-compose.yml` lives
+- [order-service](https://github.com/MiqueiasAmorimm/-guardian-order-service) — creates orders, publishes `order.created` and consumes `payment.approved`
 
 ## Testing
 
