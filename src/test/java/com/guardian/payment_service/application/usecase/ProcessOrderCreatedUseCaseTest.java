@@ -1,6 +1,5 @@
-package application.usecase;
+package com.guardian.payment_service.application.usecase;
 
-import com.guardian.payment_service.application.usecase.ProcessOrderCreatedUseCase;
 import com.guardian.payment_service.domain.model.Payment;
 import com.guardian.payment_service.infrastructure.PaymentRepository;
 import com.guardian.payment_service.infrastructure.event.OrderCreatedEvent;
