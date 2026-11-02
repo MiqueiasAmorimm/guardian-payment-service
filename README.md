@@ -13,11 +13,12 @@ Microservice responsible for payments in an event-driven e-commerce system. It c
 - `PaymentStatus` enum (PENDING, APPROVED, REJECTED) and `PaymentStatusTransitionValidator`
 - Flyway migrations: create the `payments` table and add the unique constraint on `order_id`
 - `PaymentRepository`
+- Unit tests for `ProcessOrderCreatedUseCase`: the duplicate event path and the new payment path (status, order ID and amount of the published payment)
 - CI with GitHub Actions (build and test on every push to main)
 
 **Planned**
 - Publishing `payment.rejected` (`reject(reason)` exists, but nothing triggers it yet)
-- Unit tests (including one for the duplicate event check)
+- Unit tests for the `Payment` entity, the transition validator and the Kafka consumer and publisher
 
 ## Tech Stack
 
@@ -119,7 +120,7 @@ This service uses **Apache Kafka**.
 - Every payment is approved: the decision is simulated.
 - Saving the payment and publishing the event are not atomic. If the publish fails after the save, the order never gets its approval, and a redelivery of `order.created` is ignored by the duplicate check, so the event is not sent again. The planned fix is the transactional outbox.
 - The result of the Kafka send is not checked.
-- The duplicate check has no automated test yet.
+- The unique constraint on `order_id` is not exercised by an automated test: the unit tests use a mock repository, so there is no integration test against a real database.
 
 ## Related repositories
 
@@ -128,8 +129,14 @@ This service uses **Apache Kafka**.
 
 ## Testing
 
-No tests yet. Planned: unit tests for the `Payment` entity, the transition validator and the use case.
+Unit tests with JUnit 5 and Mockito (2 tests) cover `ProcessOrderCreatedUseCase`: a duplicate event is ignored (nothing is saved or published), and a new event creates an approved payment that is published with the right order ID and amount. The `Payment` entity, the transition validator, the consumer and the publisher have no tests yet.
+
+Run tests:
+
+```bash
+mvn test
+```
 
 ## CI
 
-GitHub Actions builds the project and runs the tests on every push and pull request to main. Until the first tests exist, the run only checks that the project compiles.
+GitHub Actions builds the project and runs the tests on every push and pull request to main.
