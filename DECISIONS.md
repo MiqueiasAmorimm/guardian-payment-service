@@ -24,15 +24,15 @@ Kafka guarantees at-least-once delivery, so the same `order.created` event can a
 
 Two layers handle this. The use case asks `existsByOrderId` and ignores the event if a payment already exists, which covers the common case. A unique constraint on `payments.order_id` covers the rare case where two copies are processed at the same time, because the database rejects the second insert. Considered relying only on the constraint, but then the duplicate would surface as an exception instead of a controlled warning in the log.
 
-Trade-offs: the check and the insert are not atomic, so the constraint is what actually guarantees uniqueness. The duplicate check also has a side effect: if the payment is saved but publishing `payment.approved` fails, a redelivery of `order.created` finds the existing payment and exits, so the approval is never sent again. The transactional outbox would fix both directions. The duplicate path is not covered by an automated test yet.
+Trade-offs: the check and the insert are not atomic, so the constraint is what actually guarantees uniqueness. The duplicate check also has a side effect: if the payment is saved but publishing `payment.approved` fails, a redelivery of `order.created` finds the existing payment and exits, so the approval is never sent again. The transactional outbox would fix both directions. The duplicate path is covered by a unit test (nothing is saved or published when the payment already exists), but not by an integration test, so the unique constraint itself is not exercised automatically.
 
 ## Publishing Isolated in PaymentEventPublisher
 
 `ProcessOrderCreatedUseCase` does not use `KafkaTemplate` directly. A `PaymentEventPublisher` (in `infrastructure.event`) receives the saved `Payment`, builds the `PaymentApprovedEvent` and sends it to `payment.approved`. The topic name and the Kafka API live in one class, and the use case only calls `publishApproved(...)` after the `save`.
 
-Considered injecting `KafkaTemplate` into the use case, as order-service does in `CreateOrderUseCase`. It is simpler and has one class less, but the use case would know about Kafka. Chose the separate class so the business flow does not depend on the messaging mechanism and can be tested with a simple mock of the publisher.
+Considered injecting `KafkaTemplate` into the use case, as order-service does in `CreateOrderUseCase`. It is simpler and has one class less, but the use case would know about Kafka. Chose the separate class so the business flow does not depend on the messaging mechanism and can be tested with a simple mock of the publisher. The use case tests do this: they check which payment is handed to the publisher.
 
-Trade-offs: one more class and one more constructor argument. Order-service and payment-service now follow different styles for the same problem. The result of the Kafka send is not checked, so a failed publish is not detected. No automated test covers the publisher yet.
+Trade-offs: one more class and one more constructor argument. Order-service and payment-service now follow different styles for the same problem. The result of the Kafka send is not checked, so a failed publish is not detected. The publisher class itself (the event it builds and the topic it sends to) has no automated test yet.
 
 ## Simulated Payment Approval
 
